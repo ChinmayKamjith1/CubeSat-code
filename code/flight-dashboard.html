@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Fire Detection Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background-color: #b3e0ff; text-align: center; }
+        h1 {
+            font-family: 'Poppins', sans-serif; /* Using Poppins font */
+            color: white;
+            font-size: 48px; /* Increase font size */
+            font-weight: 600; /* Bold font */
+            background: linear-gradient(to right, #ff7f50, #ff6347); /* Gradient background */
+            padding: 10px 20px;
+            border-radius: 10px;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2); /* Subtle shadow */
+            display: inline-block;
+            text-align: center;
+        }
+        #banner {
+            color: white;
+            background-color: red;
+            padding: 20px;
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            display: none; /* Hidden by default */
+        }
+        #latest-file {
+            margin-top: 20px;
+            font-size: 18px;
+        }
+        #history-table {
+            margin-top: 40px;
+            border-collapse: collapse;
+            width: 100%;
+        }
+        #history-table th, #history-table td {
+            border: 1px solid black;
+            padding: 8px;
+            text-align: left;
+        }
+        #history-table th {
+            background-color: #f2f2f2;
+        }
+        /* Graph styling */
+        #graph-container {
+            margin-top: 20px;
+            width: 100%;
+            height: 500px; /* Set a smaller height */
+        }
+        #graph-label {
+            color: red;
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        #image-display {
+            margin-top: 20px;
+            max-width: 100%;
+            max-height: 300px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Fire Detection Dashboard</h1>
+
+    <!-- Red Alert Banner -->
+    <div id="banner">New Fire Detected!</div>
+
+    <!-- Display the image under the banner -->
+    <div id="image-display">
+        <img id="latest-image" src="" alt="Latest File" style="display: none;">
+    </div>
+
+    <!-- Latest Uploaded File -->
+    <div id="latest-file">
+        <p><strong> </strong> <span id="file-link">Waiting for updates...</span></p>
+    </div>
+
+    <!-- Fire Detection Graph Label -->
+    <div id="graph-label">Number of Fires: <span id="fire-count">0</span></div>
+
+    <!-- Fire Detection Graph -->
+    <div id="graph-container">
+        <canvas id="fireGraph"></canvas>
+    </div>
+
+    <!-- History Table -->
+    <h2>Detection History:</h2>
+    <table id="history-table">
+        <thead>
+            <tr>
+                <th>Time of Detection</th>
+                <th>File Download Link</th>
+                <th>SHA</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Detected alerts will be added here -->
+        </tbody>
+    </table>
+
+    <!-- Include Chart.js and the Date Adapter -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const repoOwner = "ChinmayKamjith1";
+        const repoName = "CubeSat-Repo";
+        const filePath = "captured_images1/test.jpg";
+
+        let latestSha = "";
+        const token = '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';
+
+        // Fire detection counts and timestamps for graph
+        let fireCountData = [];
+        let fireTimeData = [];
+        let firstflag = true;
+        let fireGraphInstance = null; // Store the current chart instance
+
+        async function fetchLatestFileSha() {
+            const apiUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${filePath}?t=${new Date().getTime()}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    headers: {
+                        'Authorization': `token ${token}`,
+                        'Accept': 'application/vnd.github.v3+json'
+                    }
+                });
+
+                if (!response.ok) throw new Error(`Error: ${response.statusText}`);
+
+                const fileData = await response.json();
+                const currentSha = fileData.sha;
+                if (firstflag !== true) {
+                    if (currentSha !== latestSha) {
+                        showAlert(fileData.download_url, currentSha, fileData.download_url.replace('txt', 'jpg')); // Show image under the alert
+                        addToHistory(fileData.download_url, currentSha);
+                        updateGraph(); // Update graph data
+                    }
+                } else {
+                    firstflag = false;
+                }
+                latestSha = currentSha;
+
+            } catch (error) {
+                console.error('Error fetching file SHA:', error);
+				firstflag = false;
+            }
+        }
+
+        // Function to show the red alert banner and the latest file link
+        function showAlert(downloadUrl, sha, imageUrl) {
+            const banner = document.getElementById('banner');
+            const fileLink = document.getElementById('file-link');
+            const latestImage = document.getElementById('latest-image');
+
+            banner.style.display = 'block';
+
+            fileLink.innerHTML = `<a href="${downloadUrl}" target="_blank">Download Latest File</a>`;
+
+            // Display image under the banner
+            latestImage.src = imageUrl;
+            latestImage.style.display = 'block';
+
+            setTimeout(() => {
+                banner.style.display = 'none';
+                
+            }, 3000);
+        }
+
+        // Function to add the file link and SHA to the history table
+        function addToHistory(downloadUrl, sha) {
+            const historyTable = document.getElementById('history-table').getElementsByTagName('tbody')[0];
+
+            const row = historyTable.insertRow(0); 
+            const timeCell = row.insertCell(0);
+            const linkCell = row.insertCell(1);
+            const shaCell = row.insertCell(2);
+
+            const timestamp = new Date(); // Use Date object instead of string
+
+            timeCell.textContent = timestamp.toLocaleString(); // Display readable time
+            linkCell.innerHTML = `<a href="${downloadUrl}" target="_blank">Download File</a>`;
+            shaCell.textContent = sha;
+
+            // Update fire detection count and time for graph
+            fireCountData.push(fireCountData.length + 1); // Increment fire count
+            fireTimeData.push(timestamp); // Push Date object for correct time handling
+
+            // Update the number of fires label
+            document.getElementById('fire-count').textContent = fireCountData.length;
+
+            // Log data for debugging
+            console.log("Fire Count Data:", fireCountData);
+            console.log("Fire Time Data:", fireTimeData);
+        }
+
+        // Function to update the fire detection graph
+        function updateGraph() {
+            const ctx = document.getElementById('fireGraph').getContext('2d');
+
+            // If a chart already exists, destroy it before creating a new one
+            if (fireGraphInstance) {
+                fireGraphInstance.destroy();
+            }
+
+            // Log data to ensure the graph has the correct data
+            console.log("Updating Graph with Data:", fireTimeData, fireCountData);
+
+            fireGraphInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: fireTimeData,
+                    datasets: [{
+                        label: 'Number of Fires',
+                        data: fireCountData,
+                        borderColor: 'red',
+                        borderWidth: 2,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'minute',  // Display minutes as units
+                                tooltipFormat: 'll HH:mm',  // Display full date and time in the tooltip
+                                displayFormats: {
+                                    minute: 'HH:mm',  // Display time in HH:mm format
+                                },
+                            },
+                            title: {
+                                display: true,
+                                text: 'Time of Detection'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Number of Fires'
+                            },
+                            beginAtZero: true,
+                            suggestedMax: 100  // Ensure y-axis doesn't go beyond 100
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            enabled: true, // Make sure tooltips are enabled
+                            mode: 'nearest', // Tooltip triggers on nearest point
+                            intersect: false, // Tooltip shows even when hovering near data points
+                            callbacks: {
+                                // Custom tooltip content
+                                label: function(tooltipItem) {
+                                    const time = tooltipItem.label;  // Time of the detection
+                                    const count = tooltipItem.raw;   // Fire count
+                                    return `Time: ${time}\nFires Detected: ${count}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        setInterval(fetchLatestFileSha, 2000);
+        fetchLatestFileSha();
+    });
+</script>
+
+</body>
+
+</html>
